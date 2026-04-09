@@ -90,7 +90,32 @@ export async function initLiffAndGetStatus(): Promise<LiffStatus> {
     const msg = err instanceof Error ? err.message : String(err);
     status.initError = msg;
     pushLog(status, `liff.init() 失敗: ${msg}`);
+
+    // "Unable to load client features" は LIFF URL 経由でアクセスしていない時に発生。
+    // 自動的に https://liff.line.me/<LIFF_ID>/<current-path> にリダイレクトする。
+    if (
+      typeof window !== "undefined" &&
+      msg.toLowerCase().includes("unable to load client features")
+    ) {
+      // リダイレクトループ防止フラグ
+      const redirectFlag = "liffRedirectAttempted";
+      const attempted = sessionStorage.getItem(redirectFlag);
+      if (!attempted) {
+        sessionStorage.setItem(redirectFlag, "1");
+        const path = window.location.pathname + window.location.search;
+        const target = `https://liff.line.me/${liffId}${path}`;
+        pushLog(status, `LIFF URL へリダイレクト: ${target}`);
+        window.location.replace(target);
+      } else {
+        pushLog(status, "LIFFリダイレクト済みだが再失敗。LIFF URL直アクセスの可能性");
+      }
+    }
     return status;
+  }
+
+  // 成功した場合はリダイレクトフラグをクリア
+  if (typeof window !== "undefined") {
+    sessionStorage.removeItem("liffRedirectAttempted");
   }
 
   try {
