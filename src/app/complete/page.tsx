@@ -1,8 +1,24 @@
 "use client";
 
-import { closeLiff } from "@/lib/liff";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { initLiff, closeLiff } from "@/lib/liff";
 
 export default function CompletePage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    initLiff();
+  }, []);
+
+  async function handleClose() {
+    const closed = await closeLiff();
+    if (!closed) {
+      // LINE以外のブラウザで開いている場合はトップへ戻す
+      router.push("/");
+    }
+  }
+
   return (
     <div className="flex flex-col items-center py-12 text-center">
       <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-[#c9a84c]/20">
@@ -18,7 +34,7 @@ export default function CompletePage() {
         天候等により日程変更が必要な場合は、LINEにてご連絡いたします。
       </p>
       <button
-        onClick={closeLiff}
+        onClick={handleClose}
         className="rounded-lg bg-[#c9a84c] px-8 py-3 font-bold text-[#0a1628] transition hover:bg-[#d4b85e] active:scale-[0.98]"
       >
         閉じる

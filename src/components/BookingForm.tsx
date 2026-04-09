@@ -4,11 +4,10 @@ import { useState, useEffect, type FormEventHandler } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { plans, transferOption } from "@/data/plans";
 import { BookingFormData } from "@/types";
-import { initLiff, getLiffProfile } from "@/lib/liff";
+import { initLiffAndGetProfile } from "@/lib/liff";
 
-function getTomorrow() {
+function getToday() {
   const d = new Date();
-  d.setDate(d.getDate() + 1);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -40,11 +39,10 @@ export default function BookingForm() {
 
   const selectedPlan = plans.find((p) => p.id === plan);
   const totalPersons = numMale + numFemale + numChild + numInfant;
-  const tomorrow = getTomorrow();
+  const today = getToday();
 
   useEffect(() => {
-    initLiff().then(async () => {
-      const profile = await getLiffProfile();
+    initLiffAndGetProfile().then((profile) => {
       if (profile) {
         setLineUserId(profile.userId);
         setLineDisplayName(profile.displayName);
@@ -83,7 +81,7 @@ export default function BookingForm() {
   function validate(): string[] {
     const errs: string[] = [];
     if (!preferredDate) errs.push("撮影希望日を選択してください");
-    else if (preferredDate < tomorrow) errs.push("撮影希望日は翌日以降を選択してください");
+    else if (preferredDate < today) errs.push("撮影希望日は本日以降を選択してください");
     if (!plan) errs.push("プランを選択してください");
     if (!representativeName.trim()) errs.push("お名前を入力してください");
     if (totalPersons < 1) errs.push("人数を1名以上入力してください");
@@ -144,6 +142,12 @@ export default function BookingForm() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-6">
+      {lineDisplayName && (
+        <div className="rounded-lg border border-[#c9a84c]/30 bg-[#c9a84c]/5 p-3 text-sm text-[#c9a84c]">
+          LINE: {lineDisplayName} 様として予約します
+        </div>
+      )}
+
       {errors.length > 0 && (
         <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-4">
           {errors.map((err, i) => (
@@ -161,7 +165,7 @@ export default function BookingForm() {
         </label>
         <input
           type="date"
-          min={tomorrow}
+          min={today}
           value={preferredDate}
           onChange={(e) => setPreferredDate(e.target.value)}
           className={inputClass}
@@ -318,7 +322,7 @@ export default function BookingForm() {
         <label className={labelClass}>振替希望日（天候不良時）</label>
         <input
           type="date"
-          min={stayFrom || tomorrow}
+          min={stayFrom || today}
           max={stayTo || undefined}
           value={alternativeDate}
           onChange={(e) => setAlternativeDate(e.target.value)}
