@@ -4,7 +4,8 @@ import { useState, useEffect, type FormEventHandler } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { plans, transferOption } from "@/data/plans";
 import { BookingFormData } from "@/types";
-import { initLiffAndGetProfile } from "@/lib/liff";
+import { initLiffAndGetStatus, type LiffStatus } from "@/lib/liff";
+import LiffDebugPanel from "@/components/LiffDebugPanel";
 
 function getToday() {
   const d = new Date();
@@ -36,16 +37,18 @@ export default function BookingForm() {
   const [alternativeDate, setAlternativeDate] = useState("");
   const [instagram, setInstagram] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
+  const [liffStatus, setLiffStatus] = useState<LiffStatus | null>(null);
 
   const selectedPlan = plans.find((p) => p.id === plan);
   const totalPersons = numMale + numFemale + numChild + numInfant;
   const today = getToday();
 
   useEffect(() => {
-    initLiffAndGetProfile().then((profile) => {
-      if (profile) {
-        setLineUserId(profile.userId);
-        setLineDisplayName(profile.displayName);
+    initLiffAndGetStatus().then((status) => {
+      setLiffStatus(status);
+      if (status.profile) {
+        setLineUserId(status.profile.userId);
+        setLineDisplayName(status.profile.displayName);
       }
     });
   }, []);
@@ -149,11 +152,7 @@ export default function BookingForm() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-6">
-      {lineDisplayName && (
-        <div className="rounded-lg border border-[#c9a84c]/30 bg-[#c9a84c]/5 p-3 text-sm text-[#c9a84c]">
-          LINE: {lineDisplayName} 様として予約します
-        </div>
-      )}
+      <LiffDebugPanel status={liffStatus} />
 
       {errors.length > 0 && (
         <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-4">
