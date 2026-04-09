@@ -1,0 +1,75 @@
+import { Plan } from "@/types";
+
+export const plans: Plan[] = [
+  {
+    id: "casual",
+    name: "カジュアルプラン",
+    tag: "お得に体験",
+    catchCopy: "サクッと撮影したい人向け!",
+    priceAdult: 6500,
+    priceChild: 3000,
+    duration: "15分前後",
+    includes: ["8枚データ"],
+  },
+  {
+    id: "standard",
+    name: "スタンダードプラン",
+    tag: "プロが撮る特別価格",
+    catchCopy: "本格撮影30分撮り放題",
+    priceAdult: 9000,
+    priceChild: 5000,
+    duration: "30分",
+    includes: ["撮影データ全て"],
+  },
+  {
+    id: "creative",
+    name: "クリエイティブプラン",
+    tag: "オリジナルで個性的な撮影",
+    catchCopy: "電飾3枚＋通常カット",
+    priceAdult: 14000,
+    priceChild: 6000,
+    duration: "30分",
+    includes: ["撮影データ全て"],
+  },
+  {
+    id: "location",
+    name: "ロケーションプラン",
+    tag: "撮影場所にこだわる",
+    catchCopy: "どうしても撮りたい場所がある方に! 白い砂浜・緑",
+    priceAdult: 20000,
+    duration: "30分",
+    includes: ["撮影データ全て"],
+  },
+  {
+    id: "premium",
+    name: "プレミアムプラン",
+    tag: "ラグジュアリー",
+    catchCopy: "星と光で2人のメモリアル",
+    priceAdult: 25000,
+    duration: "40分",
+    includes: ["撮影データ全て", "送迎付き(2人まで)", "電飾撮影5枚"],
+  },
+  {
+    id: "propose",
+    name: "プロポーズプラン",
+    tag: "一生の思い出を",
+    catchCopy: "星空の下で最高のプロポーズを",
+    priceAdult: 100000,
+    priceLabel: "1組 ¥100,000",
+    duration: "40分",
+    includes: [
+      "撮影データ全て",
+      "サプライズ演出",
+      "指輪預かり対応",
+      "電飾使用",
+    ],
+    notes: ["花束はお客様準備"],
+    hideTransfer: true,
+  },
+];
+
+export const transferOption = {
+  price: 5000,
+  maxPersons: 3,
+  label: "送迎オプション（¥5,000 / 3名まで）",
+};

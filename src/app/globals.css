@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --color-navy: #0a1628;
+  --color-gold: #c9a84c;
+}
+
+body {
+  background-color: var(--color-navy);
+  color: #ffffff;
+}
+
+/* Date input styling for dark theme */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+select option {
+  background-color: #1a2a4a;
+  color: #ffffff;
+}
