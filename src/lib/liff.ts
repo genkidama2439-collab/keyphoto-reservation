@@ -103,16 +103,10 @@ export async function initLiffAndGetStatus(): Promise<LiffStatus> {
 
   if (!status.isLoggedIn) {
     pushLog(status, "未ログイン状態");
-    if (status.isInClient) {
-      pushLog(status, "LINE内ブラウザなので liff.login() でリダイレクトします");
-      try {
-        liff.login({ redirectUri: window.location.href });
-      } catch (err) {
-        pushLog(status, `liff.login() 失敗: ${err}`);
-      }
-    } else {
-      pushLog(status, "外部ブラウザのためログインはスキップ");
-    }
+    // NOTE: 以前は LINE内ブラウザで liff.login() を呼んでリダイレクトしていたが、
+    // 一部環境で意図しない画面遷移（前画面に戻る）を引き起こしていたため無効化。
+    // 通常 LINE内ブラウザでは liff.init() 完了時点で isLoggedIn=true になる。
+    pushLog(status, "ログイン自動呼び出しは無効化（手動ログインが必要な場合があります）");
     return status;
   }
 
