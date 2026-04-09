@@ -2,7 +2,11 @@
 
 import liff from "@line/liff";
 
-let liffInitPromise: Promise<boolean> | null = null;
+// 初期化の結果を共有するための状態
+let liffInitPromise: Promise<void> | null = null;
+let liffInitSucceeded = false;
+let liffInitError: string | null = null;
+const liffInitLogs: string[] = [];
 
 export type LiffProfile = {
   userId: string;
@@ -22,32 +26,63 @@ export type LiffStatus = {
   logs: string[];
 };
 
-function pushLog(status: LiffStatus, line: string) {
+function logGlobal(line: string) {
   const timestamp = new Date().toLocaleTimeString("ja-JP");
-  status.logs.push(`[${timestamp}] ${line}`);
+  const formatted = `[${timestamp}] ${line}`;
+  liffInitLogs.push(formatted);
   console.log("[liff]", line);
 }
 
 /**
- * LIFFを初期化する。複数回呼ばれても1回だけ実行される。
+ * LIFFを初期化する。最初に呼ばれた一回だけ実行される。
+ * ルートレイアウトから早めに呼ぶことで、URLに liff.state が付いている
+ * 初期ロード段階で init を完了させる。
  */
-export function initLiff(): Promise<boolean> {
+export function initLiff(): Promise<void> {
   if (liffInitPromise) return liffInitPromise;
 
   liffInitPromise = (async () => {
     const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
+    logGlobal(`LIFF_ID: ${liffId ? liffId.slice(0, 10) + "..." : "未設定"}`);
     if (!liffId) {
-      console.warn("[liff] NEXT_PUBLIC_LIFF_ID is not set");
-      return false;
+      liffInitError = "NEXT_PUBLIC_LIFF_ID is not set";
+      logGlobal("NEXT_PUBLIC_LIFF_ID が設定されていません");
+      return;
     }
 
+    logGlobal(`liff.init() を実行中... (url=${window.location.href})`);
     try {
       await liff.init({ liffId });
-      return true;
+      liffInitSucceeded = true;
+      logGlobal("liff.init() 成功");
     } catch (err) {
-      console.warn("[liff] init failed:", err);
-      liffInitPromise = null;
-      return false;
+      const msg = err instanceof Error ? err.message : String(err);
+      liffInitError = msg;
+      logGlobal(`liff.init() 失敗: ${msg}`);
+
+      // 非LIFF URLからの直接アクセス時は、LIFF URLへ自動リダイレクト
+      if (
+        typeof window !== "undefined" &&
+        msg.toLowerCase().includes("unable to load client features")
+      ) {
+        const redirectFlag = "liffRedirectAttempted";
+        const attempted = sessionStorage.getItem(redirectFlag);
+        if (!attempted) {
+          sessionStorage.setItem(redirectFlag, "1");
+          const path = window.location.pathname + window.location.search;
+          const target = `https://liff.line.me/${liffId}${path}`;
+          logGlobal(`LIFF URL へリダイレクト: ${target}`);
+          window.location.replace(target);
+          return;
+        }
+        logGlobal("LIFFリダイレクト済みだが再失敗");
+      }
+      // 失敗しても再挑戦できるようpromiseを残す（状態は保持）
+    }
+
+    // 成功時はリダイレクトフラグをクリア
+    if (liffInitSucceeded && typeof window !== "undefined") {
+      sessionStorage.removeItem("liffRedirectAttempted");
     }
   })();
 
@@ -55,87 +90,44 @@ export function initLiff(): Promise<boolean> {
 }
 
 /**
- * LIFFを初期化してプロフィール取得、状態を詳しく返す（デバッグパネル用）。
+ * 初期化状態とプロフィールを取得してデバッグパネル向けに返す。
+ * initLiff() の結果を再利用するので、init は1回しか実行されない。
  */
 export async function initLiffAndGetStatus(): Promise<LiffStatus> {
+  // 既に開始済みのルートレベル init を待つ
+  await initLiff();
+
   const status: LiffStatus = {
-    liffIdSet: false,
-    initStarted: false,
-    initSucceeded: false,
-    initError: null,
+    liffIdSet: !!process.env.NEXT_PUBLIC_LIFF_ID,
+    initStarted: true,
+    initSucceeded: liffInitSucceeded,
+    initError: liffInitError,
     isInClient: null,
     isLoggedIn: null,
     profileFetched: false,
     profileError: null,
     profile: null,
-    logs: [],
+    logs: [...liffInitLogs],
   };
 
-  const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-  status.liffIdSet = !!liffId;
-  pushLog(status, `LIFF_ID: ${liffId ? liffId.slice(0, 10) + "..." : "未設定"}`);
-
-  if (!liffId) {
-    pushLog(status, "NEXT_PUBLIC_LIFF_ID が設定されていません");
+  if (!liffInitSucceeded) {
     return status;
-  }
-
-  status.initStarted = true;
-  pushLog(status, "liff.init() を実行中...");
-  try {
-    await liff.init({ liffId });
-    status.initSucceeded = true;
-    pushLog(status, "liff.init() 成功");
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    status.initError = msg;
-    pushLog(status, `liff.init() 失敗: ${msg}`);
-
-    // "Unable to load client features" は LIFF URL 経由でアクセスしていない時に発生。
-    // 自動的に https://liff.line.me/<LIFF_ID>/<current-path> にリダイレクトする。
-    if (
-      typeof window !== "undefined" &&
-      msg.toLowerCase().includes("unable to load client features")
-    ) {
-      // リダイレクトループ防止フラグ
-      const redirectFlag = "liffRedirectAttempted";
-      const attempted = sessionStorage.getItem(redirectFlag);
-      if (!attempted) {
-        sessionStorage.setItem(redirectFlag, "1");
-        const path = window.location.pathname + window.location.search;
-        const target = `https://liff.line.me/${liffId}${path}`;
-        pushLog(status, `LIFF URL へリダイレクト: ${target}`);
-        window.location.replace(target);
-      } else {
-        pushLog(status, "LIFFリダイレクト済みだが再失敗。LIFF URL直アクセスの可能性");
-      }
-    }
-    return status;
-  }
-
-  // 成功した場合はリダイレクトフラグをクリア
-  if (typeof window !== "undefined") {
-    sessionStorage.removeItem("liffRedirectAttempted");
   }
 
   try {
     status.isInClient = liff.isInClient();
     status.isLoggedIn = liff.isLoggedIn();
-    pushLog(status, `isInClient=${status.isInClient}, isLoggedIn=${status.isLoggedIn}`);
+    status.logs.push(`[-] isInClient=${status.isInClient}, isLoggedIn=${status.isLoggedIn}`);
   } catch (err) {
-    pushLog(status, `status check failed: ${err}`);
+    status.logs.push(`[-] status check failed: ${err}`);
   }
 
   if (!status.isLoggedIn) {
-    pushLog(status, "未ログイン状態");
-    // NOTE: 以前は LINE内ブラウザで liff.login() を呼んでリダイレクトしていたが、
-    // 一部環境で意図しない画面遷移（前画面に戻る）を引き起こしていたため無効化。
-    // 通常 LINE内ブラウザでは liff.init() 完了時点で isLoggedIn=true になる。
-    pushLog(status, "ログイン自動呼び出しは無効化（手動ログインが必要な場合があります）");
+    status.logs.push("[-] 未ログイン状態（プロフィール取得スキップ）");
     return status;
   }
 
-  pushLog(status, "liff.getProfile() を実行中...");
+  status.logs.push("[-] liff.getProfile() を実行中...");
   try {
     const profile = await liff.getProfile();
     status.profileFetched = true;
@@ -143,11 +135,11 @@ export async function initLiffAndGetStatus(): Promise<LiffStatus> {
       userId: profile.userId,
       displayName: profile.displayName,
     };
-    pushLog(status, `プロフィール取得成功: ${profile.displayName}`);
+    status.logs.push(`[-] プロフィール取得成功: ${profile.displayName}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     status.profileError = msg;
-    pushLog(status, `getProfile 失敗: ${msg}`);
+    status.logs.push(`[-] getProfile 失敗: ${msg}`);
   }
 
   return status;
@@ -155,8 +147,8 @@ export async function initLiffAndGetStatus(): Promise<LiffStatus> {
 
 export async function closeLiff(): Promise<boolean> {
   try {
-    const ok = await initLiff();
-    if (ok && liff.isInClient()) {
+    await initLiff();
+    if (liffInitSucceeded && liff.isInClient()) {
       liff.closeWindow();
       return true;
     }
