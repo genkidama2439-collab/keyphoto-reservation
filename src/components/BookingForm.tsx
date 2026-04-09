@@ -88,6 +88,7 @@ export default function BookingForm() {
       lineDisplayName,
       preferredDate,
       plan,
+      planName: selectedPlan?.name || plan,
       transferOption: transferOptionChecked,
       representativeName,
       numMale,

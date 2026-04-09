@@ -17,6 +17,7 @@ export type BookingFormData = {
   lineDisplayName: string;
   preferredDate: string;
   plan: string;
+  planName: string;
   transferOption: boolean;
   representativeName: string;
   numMale: number;
