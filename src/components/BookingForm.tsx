@@ -58,6 +58,13 @@ export default function BookingForm() {
       const stored = sessionStorage.getItem("bookingData");
       if (!stored) return;
       const saved = JSON.parse(stored) as Partial<BookingFormData>;
+
+      // URLで別プランが指定されているなら、古いsessionStorageは破棄（別プランの新規予約とみなす）
+      if (preselectedPlan && saved.plan && saved.plan !== preselectedPlan) {
+        sessionStorage.removeItem("bookingData");
+        return;
+      }
+
       if (saved.preferredDate) setPreferredDate(saved.preferredDate);
       if (saved.plan) setPlan(saved.plan);
       if (typeof saved.transferOption === "boolean") setTransferOptionChecked(saved.transferOption);
@@ -75,7 +82,7 @@ export default function BookingForm() {
     } catch {
       // 壊れたデータは無視
     }
-  }, []);
+  }, [preselectedPlan]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   function validate(): string[] {
