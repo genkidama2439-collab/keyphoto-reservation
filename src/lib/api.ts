@@ -1,26 +1,18 @@
 import { BookingFormData } from "@/types";
 
-const GAS_URL = process.env.NEXT_PUBLIC_GAS_URL || "";
-
+/**
+ * 同一オリジンの Next.js API Route 経由で GAS に予約を送信する。
+ * 直接 GAS を叩くと iOS WebView で 302 クロスオリジンリダイレクトが
+ * 失敗し "Load failed" になるため、サーバー側で中継する。
+ */
 export async function submitBooking(
   data: BookingFormData
 ): Promise<{ success: boolean; message?: string }> {
-  if (!GAS_URL) {
-    throw new Error("GAS_URL is not configured");
-  }
-
-  // GASのWebアプリへのPOSTはCORSプリフライトを避けるため
-  // Content-Type: text/plain を使用する必要がある
-  const response = await fetch(GAS_URL, {
+  const response = await fetch("/api/booking", {
     method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
-    redirect: "follow",
   });
-
-  if (!response.ok) {
-    throw new Error(`送信失敗: ${response.status}`);
-  }
 
   const text = await response.text();
   let result: { success: boolean; message?: string };
@@ -29,8 +21,8 @@ export async function submitBooking(
   } catch {
     throw new Error("サーバーから予期しないレスポンスが返りました");
   }
-  if (!result.success) {
-    throw new Error(result.message || "予約の登録に失敗しました");
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || `予約の登録に失敗しました (${response.status})`);
   }
   return result;
 }
