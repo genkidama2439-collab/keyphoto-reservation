@@ -143,7 +143,7 @@ export default function BookingForm() {
   const labelClass = "mb-1 block text-sm font-medium text-white/80";
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} noValidate className="space-y-6">
       {errors.length > 0 && (
         <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-4">
           {errors.map((err, i) => (
