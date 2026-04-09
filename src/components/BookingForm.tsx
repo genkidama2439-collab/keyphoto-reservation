@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, type FormEventHandler } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { plans, transferOption } from "@/data/plans";
 import { BookingFormData } from "@/types";
@@ -9,7 +9,10 @@ import { initLiff, getLiffProfile } from "@/lib/liff";
 function getTomorrow() {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return d.toISOString().split("T")[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export default function BookingForm() {
@@ -49,6 +52,34 @@ export default function BookingForm() {
     });
   }, []);
 
+  // sessionStorage から復元（確認画面から「戻って修正する」で戻ってきた場合）
+  // sessionStorage はブラウザ外部ストアなので、マウント時に一度だけ読み込む
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem("bookingData");
+      if (!stored) return;
+      const saved = JSON.parse(stored) as Partial<BookingFormData>;
+      if (saved.preferredDate) setPreferredDate(saved.preferredDate);
+      if (saved.plan) setPlan(saved.plan);
+      if (typeof saved.transferOption === "boolean") setTransferOptionChecked(saved.transferOption);
+      if (saved.representativeName) setRepresentativeName(saved.representativeName);
+      if (typeof saved.numMale === "number") setNumMale(saved.numMale);
+      if (typeof saved.numFemale === "number") setNumFemale(saved.numFemale);
+      if (typeof saved.numChild === "number") setNumChild(saved.numChild);
+      if (typeof saved.numInfant === "number") setNumInfant(saved.numInfant);
+      if (saved.phone) setPhone(saved.phone);
+      if (saved.accommodation) setAccommodation(saved.accommodation);
+      if (saved.stayFrom) setStayFrom(saved.stayFrom);
+      if (saved.stayTo) setStayTo(saved.stayTo);
+      if (saved.alternativeDate) setAlternativeDate(saved.alternativeDate);
+      if (saved.instagram) setInstagram(saved.instagram);
+    } catch {
+      // 壊れたデータは無視
+    }
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   function validate(): string[] {
     const errs: string[] = [];
     if (!preferredDate) errs.push("撮影希望日を選択してください");
@@ -73,7 +104,7 @@ export default function BookingForm() {
     return errs;
   }
 
-  function handleSubmit(e: FormEvent) {
+  const handleSubmit: FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     const errs = validate();
     if (errs.length > 0) {
@@ -105,7 +136,7 @@ export default function BookingForm() {
 
     sessionStorage.setItem("bookingData", JSON.stringify(formData));
     router.push("/confirm");
-  }
+  };
 
   const inputClass =
     "w-full rounded-lg border border-white/20 bg-white/5 px-4 py-3 text-white placeholder-white/30 outline-none focus:border-[#c9a84c] focus:ring-1 focus:ring-[#c9a84c]";
@@ -207,9 +238,19 @@ export default function BookingForm() {
               <label className="mb-1 block text-xs text-white/60">{label}</label>
               <input
                 type="number"
+                inputMode="numeric"
                 min={0}
-                value={value}
-                onChange={(e) => setter(Math.max(0, parseInt(e.target.value) || 0))}
+                value={value === 0 ? "" : value}
+                placeholder="0"
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "") {
+                    setter(0);
+                    return;
+                  }
+                  const n = parseInt(v, 10);
+                  setter(Number.isNaN(n) ? 0 : Math.max(0, n));
+                }}
                 className={inputClass}
               />
             </div>

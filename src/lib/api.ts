@@ -23,9 +23,14 @@ export async function submitBooking(
   }
 
   const text = await response.text();
+  let result: { success: boolean; message?: string };
   try {
-    return JSON.parse(text);
+    result = JSON.parse(text);
   } catch {
-    return { success: true };
+    throw new Error("サーバーから予期しないレスポンスが返りました");
   }
+  if (!result.success) {
+    throw new Error(result.message || "予約の登録に失敗しました");
+  }
+  return result;
 }

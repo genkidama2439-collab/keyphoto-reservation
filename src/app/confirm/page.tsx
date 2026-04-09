@@ -18,7 +18,14 @@ export default function ConfirmPage() {
       router.replace("/booking");
       return;
     }
-    setData(JSON.parse(stored));
+    try {
+      // sessionStorage はブラウザ外部ストアなので、
+      // マウント時に一度だけ読む目的でルールを無効化
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setData(JSON.parse(stored));
+    } catch {
+      router.replace("/booking");
+    }
   }, [router]);
 
   if (!data) {
@@ -36,8 +43,9 @@ export default function ConfirmPage() {
       await submitBooking(data);
       sessionStorage.removeItem("bookingData");
       router.push("/complete");
-    } catch {
-      setError("送信に失敗しました。もう一度お試しください。");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "送信に失敗しました。もう一度お試しください。";
+      setError(message);
       setSubmitting(false);
     }
   }

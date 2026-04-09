@@ -7,9 +7,12 @@
   --color-gold: #c9a84c;
 }
 
+html,
 body {
   background-color: var(--color-navy);
   color: #ffffff;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 /* Date input styling for dark theme */
