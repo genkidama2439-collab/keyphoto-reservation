@@ -1,20 +1,25 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { initLiff, closeLiff } from "@/lib/liff";
 
 export default function CompletePage() {
   const router = useRouter();
+  const [bookingId, setBookingId] = useState("");
 
   useEffect(() => {
     initLiff();
+    const stored = sessionStorage.getItem("lastBookingId");
+    if (stored) {
+      setBookingId(stored);
+      sessionStorage.removeItem("lastBookingId");
+    }
   }, []);
 
   async function handleClose() {
     const closed = await closeLiff();
     if (!closed) {
-      // LINE以外のブラウザで開いている場合はトップへ戻す
       router.push("/");
     }
   }
@@ -27,6 +32,11 @@ export default function CompletePage() {
       <h1 className="mb-3 text-2xl font-bold text-white">
         ご予約ありがとうございます
       </h1>
+      {bookingId && (
+        <p className="mb-4 rounded-lg bg-[#c9a84c]/10 px-4 py-2 text-sm text-[#c9a84c]">
+          予約ID: <span className="font-mono font-bold">{bookingId}</span>
+        </p>
+      )}
       <p className="mb-2 text-white/70">
         予約内容をLINEでお送りしました。
       </p>

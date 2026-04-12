@@ -12,6 +12,8 @@
  * - CALENDAR_ID: GoogleカレンダーID
  * - LINE_CHANNEL_ACCESS_TOKEN: LINE Messaging APIトークン
  * - OWNER_LINE_USER_ID: オーナーのLINEユーザーID
+ * - OWNER_EMAIL: 業者側通知メールアドレス（カンマ区切りで複数可）
+ * - EMERGENCY_CONTACT: 緊急連絡先（例: 090-9279-9586（稲田））
  */
 
 const PROPS = PropertiesService.getScriptProperties();
@@ -155,9 +157,23 @@ function doPost(e) {
 
   try {
     const data = JSON.parse(e.postData.contents);
+    if (!data.lineUserId) {
+      return jsonResponse({ success: false, message: "LINEユーザー情報が取得できていません。LINE内から予約ページを開き直してください。" });
+    }
+    // 同一ユーザー・同日・同プランの重複チェック
+    const sheet = ensureSheet();
+    const existing = sheet.getDataRange().getValues();
+    for (var i = 1; i < existing.length; i++) {
+      if (existing[i][COL["LINE ID"] - 1] === data.lineUserId &&
+          String(existing[i][COL["撮影希望日"] - 1]) === data.preferredDate &&
+          existing[i][COL["ステータス"] - 1] !== "キャンセル") {
+        return jsonResponse({ success: false, message: "同じ日付の予約が既に存在します。別の日程を選択するか、LINEでお問い合わせください。" });
+      }
+    }
     const bookingId = saveToSpreadsheet(data);
     createCalendarEvent(data, bookingId);
     sendNewBookingNotification(data, bookingId);
+    sendOwnerEmail(data, bookingId);
     return jsonResponse({ success: true, message: "予約を受け付けました", bookingId });
   } catch (err) {
     return jsonResponse({ success: false, message: err.message });
@@ -290,6 +306,71 @@ function sendNewBookingNotification(data, bookingId) {
   }
 }
 
+// ─── 業者向けメール通知（新規予約時） ─────────────────────
+function sendOwnerEmail(data, bookingId) {
+  const emailProp = PROPS.getProperty("OWNER_EMAIL");
+  if (!emailProp) return;
+
+  const totalPersons =
+    (data.numMale || 0) +
+    (data.numFemale || 0) +
+    (data.numChild || 0) +
+    (data.numInfant || 0);
+
+  const subject = `【KeyPhoto】新規予約 ${bookingId} / ${data.representativeName}様`;
+
+  const lines = [
+    "KeyPhoto 予約システムから新規予約が入りました。",
+    "",
+    "━━━━━━━━━━━━━━━━━━━━",
+    `予約ID     : ${bookingId}`,
+    `受付日時   : ${Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy/MM/dd HH:mm")}`,
+    "━━━━━━━━━━━━━━━━━━━━",
+    `撮影希望日 : ${data.preferredDate}`,
+    `プラン     : ${data.planName || data.plan}`,
+    `送迎       : ${data.transferOption ? "あり" : "なし"}`,
+    "",
+    `代表者     : ${data.representativeName}`,
+    `人数       : 合計${totalPersons}名`,
+    `  男性     : ${data.numMale || 0}名`,
+    `  女性     : ${data.numFemale || 0}名`,
+    `  子供     : ${data.numChild || 0}名`,
+    `  幼児     : ${data.numInfant || 0}名`,
+    "",
+    `携帯番号   : ${data.phone}`,
+    `宿泊施設   : ${data.accommodation}`,
+    `滞在期間   : ${data.stayFrom} 〜 ${data.stayTo}`,
+    data.alternativeDate ? `振替希望日 : ${data.alternativeDate}` : null,
+    data.instagram ? `Instagram  : ${data.instagram}` : null,
+    "",
+    "━━━━━━━━━━━━━━━━━━━━",
+    "スプレッドシートで詳細を確認し、メニューから確定操作を行ってください。",
+  ].filter(function (l) { return l !== null; });
+
+  // スプレッドシートURL（あれば添付）
+  try {
+    const ss = SpreadsheetApp.openById(PROPS.getProperty("SPREADSHEET_ID"));
+    if (ss) lines.push("", "シート: " + ss.getUrl());
+  } catch (e) {}
+
+  const body = lines.join("\n");
+
+  // カンマ区切りで複数送信先対応
+  const recipients = emailProp.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+  recipients.forEach(function (to) {
+    try {
+      MailApp.sendEmail({
+        to: to,
+        subject: subject,
+        body: body,
+        name: "KeyPhoto 予約システム",
+      });
+    } catch (err) {
+      console.error("メール送信失敗 " + to + ": " + err.message);
+    }
+  });
+}
+
 // ─── ステータス変更（メニューから実行） ────────────────────
 function confirmBooking() {
   changeStatus("確定");
@@ -318,6 +399,12 @@ function changeStatus(newStatus) {
   const name = sheet.getRange(row, COL["代表者名"]).getValue();
   const date = sheet.getRange(row, COL["撮影希望日"]).getValue();
   const planName = sheet.getRange(row, COL["プラン"]).getValue();
+  const totalPersons = sheet.getRange(row, COL["合計人数"]).getValue();
+  const phone = sheet.getRange(row, COL["携帯番号"]).getValue();
+  const accommodation = sheet.getRange(row, COL["宿泊施設"]).getValue();
+  const stayFrom = sheet.getRange(row, COL["滞在開始"]).getValue();
+  const stayTo = sheet.getRange(row, COL["滞在終了"]).getValue();
+  const alternativeDate = sheet.getRange(row, COL["振替希望日"]).getValue();
   const currentStatus = sheet.getRange(row, COL["ステータス"]).getValue();
 
   if (!bookingId) {
@@ -345,14 +432,41 @@ function changeStatus(newStatus) {
 
   let message = "";
   if (newStatus === "確定") {
+    const dateText = formatDateValue(date);
+    const stayFromText = formatDateValue(stayFrom);
+    const stayToText = formatDateValue(stayTo);
+    const altText = formatDateValue(alternativeDate);
+    const reservationSummary = [
+      `📸 予約確定 [${bookingId}]`,
+      `日付: ${dateText}`,
+      `プラン: ${planName}`,
+      `代表者: ${name}`,
+      `人数: ${totalPersons}名`,
+      `電話: ${phone}`,
+      `宿泊: ${accommodation}`,
+      `滞在: ${stayFromText} 〜 ${stayToText}`,
+      altText ? `振替: ${altText}` : "",
+    ].filter(Boolean).join("\n");
+
     message =
-      `✅ ご予約が確定しました！\n\n` +
-      `予約ID: ${bookingId}\n` +
-      `📅 撮影日: ${date}\n` +
-      `📋 プラン: ${planName}\n` +
-      `👤 ${name}様\n\n` +
-      `当日お会いできることを楽しみにしております！\n` +
-      `ご不明点がございましたらお気軽にメッセージください。`;
+      `${reservationSummary}\n\n` +
+      `【星空フォト】当日スケジュールのご案内 key photo様\n\n` +
+      `1.集合場所について\n` +
+      `撮影に最適な空のコンディションを追いかけるため、集合場所は当日確定いたします。当日正確な場所をお伝えします。事前に確定させてほしい場合は、あらかじめご連絡ください。\n\n` +
+      `2.当日の開催判断について\n` +
+      `星空撮影は雲の動きに左右されるため、最終的な開催判断は以下の通りとさせていただきます。\n` +
+      `最終判断の時間: 当日18:00ごろ（天候が不安定な場合はそれ以降）\n` +
+      `早めの判断をご希望の方へ: ご旅行のご都合などで早めの判断が必要な場合は、その時点での予報に基づいた判断をご連絡いたします。お気軽にお申し付けください。\n` +
+      `中止の場合: 他日程への振替や、中止連絡の後に晴天へ回復した場合の再連絡も可能です。その都度お知らせください。\n\n` +
+      `3.当日の服装・準備\n` +
+      `服装: 白い服や明るい色のお洋服が、夜の背景にとても綺麗に映えます。足元は暗い場所を歩くため、歩きやすい靴が安心です。\n` +
+      `防寒: 夜の屋外は冷え込むことがあります（特に12月〜3月ごろは、羽織るものを1枚お持ちいただくことをお勧めします）。\n\n` +
+      `4.緊急連絡について\n` +
+      `当日の道に迷った・少し遅れそうなどのご連絡は、現場スタッフが直接確認できるショートメッセージ（SMS）がスムーズです。\n` +
+      `当日の緊急連絡先: ${PROPS.getProperty("EMERGENCY_CONTACT") || "LINEにてご連絡ください"}\n\n` +
+      `満天の星空の下、最高の1枚を残せるようチーム一同願っております！\n` +
+      `当日のご連絡まで、どうぞよろしくお願いいたします。\n` +
+      `key photo`;
   } else if (newStatus === "キャンセル") {
     message =
       `📩 予約キャンセルのお知らせ\n\n` +
@@ -373,6 +487,14 @@ function changeStatus(newStatus) {
   } else {
     ui.alert(`ステータスを「${newStatus}」に変更しました。`);
   }
+}
+
+function formatDateValue(value) {
+  if (!value) return "";
+  if (Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, "Asia/Tokyo", "yyyy-MM-dd");
+  }
+  return String(value);
 }
 
 // ─── LINE送信共通 ──────────────────────────────────────────

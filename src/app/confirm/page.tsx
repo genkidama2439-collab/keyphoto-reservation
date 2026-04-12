@@ -35,13 +35,26 @@ export default function ConfirmPage() {
   const selectedPlan = plans.find((p) => p.id === data.plan);
   const totalPersons = data.numMale + data.numFemale + data.numChild + data.numInfant;
 
+  // 料金計算
+  const adultCount = data.numMale + data.numFemale;
+  const estimatedPrice = selectedPlan
+    ? selectedPlan.priceLabel
+      ? null // プロポーズプラン等は固定料金表記があるため個別計算しない
+      : adultCount * selectedPlan.priceAdult +
+        data.numChild * (selectedPlan.priceChild || 0) +
+        (data.transferOption && !selectedPlan.hideTransfer ? transferOption.price : 0)
+    : null;
+
   async function handleConfirm() {
     if (!data || submitting) return;
     setSubmitting(true);
     setError("");
     try {
-      await submitBooking(data);
+      const result = await submitBooking(data);
       sessionStorage.removeItem("bookingData");
+      if (result.bookingId) {
+        sessionStorage.setItem("lastBookingId", result.bookingId);
+      }
       router.push("/complete");
     } catch (err) {
       const message = err instanceof Error ? err.message : "送信に失敗しました。もう一度お試しください。";
@@ -76,6 +89,11 @@ export default function ConfirmPage() {
       : []),
     ...(data.instagram
       ? [{ label: "Instagram", value: data.instagram }]
+      : []),
+    ...(selectedPlan?.priceLabel
+      ? [{ label: "料金", value: selectedPlan.priceLabel }]
+      : estimatedPrice !== null
+      ? [{ label: "料金（税込目安）", value: `¥${estimatedPrice.toLocaleString()}` }]
       : []),
   ];
 

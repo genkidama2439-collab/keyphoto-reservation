@@ -34,12 +34,23 @@ function logGlobal(line: string) {
 }
 
 /**
- * LIFFを初期化する。最初に呼ばれた一回だけ実行される。
+ * LIFFを初期化する。成功時は結果をキャッシュし、失敗時は
+ * 次回呼び出しで再試行できるようにキャッシュをクリアする。
  * ルートレイアウトから早めに呼ぶことで、URLに liff.state が付いている
  * 初期ロード段階で init を完了させる。
  */
 export function initLiff(): Promise<void> {
-  if (liffInitPromise) return liffInitPromise;
+  // 成功済みならキャッシュを返す
+  if (liffInitPromise && liffInitSucceeded) return liffInitPromise;
+
+  // 実行中のPromiseがあればそれを待つ（二重実行防止）
+  if (liffInitPromise && !liffInitError) return liffInitPromise;
+
+  // 失敗していた場合はリセットして再試行
+  if (liffInitError) {
+    logGlobal("前回の失敗をリセットして再試行");
+    liffInitError = null;
+  }
 
   liffInitPromise = (async () => {
     const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
@@ -77,7 +88,6 @@ export function initLiff(): Promise<void> {
         }
         logGlobal("LIFFリダイレクト済みだが再失敗");
       }
-      // 失敗しても再挑戦できるようpromiseを残す（状態は保持）
     }
 
     // 成功時はリダイレクトフラグをクリア
@@ -123,7 +133,20 @@ export async function initLiffAndGetStatus(): Promise<LiffStatus> {
   }
 
   if (!status.isLoggedIn) {
-    status.logs.push("[-] 未ログイン状態（プロフィール取得スキップ）");
+    // LINE内ブラウザでは liff.init() が自動ログインするため
+    // liff.login() は不要。外部ブラウザ時のみ呼ぶ。
+    // （LINE内で liff.login() を呼ぶとリダイレクトループになる）
+    if (status.isInClient === false) {
+      status.logs.push("[-] 外部ブラウザ＋未ログイン → liff.login() を実行");
+      try {
+        liff.login();
+        // login() はリダイレクトするので、ここ以降は通常実行されない
+      } catch (err) {
+        status.logs.push(`[-] liff.login() 失敗: ${err}`);
+      }
+    } else {
+      status.logs.push("[-] LINE内ブラウザ＋未ログイン（init時に自動ログインされるはず）");
+    }
     return status;
   }
 

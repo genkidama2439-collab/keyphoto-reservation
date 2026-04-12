@@ -88,14 +88,18 @@ export default function BookingForm() {
   }, [preselectedPlan]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  const liffReady = !!lineUserId;
+
   function validate(): string[] {
     const errs: string[] = [];
+    if (!lineUserId) errs.push("LINEユーザー情報が取得できていません。LINE内から開き直してください");
     if (!preferredDate) errs.push("撮影希望日を選択してください");
     else if (preferredDate < today) errs.push("撮影希望日は本日以降を選択してください");
     if (!plan) errs.push("プランを選択してください");
     if (!representativeName.trim()) errs.push("お名前を入力してください");
     if (totalPersons < 1) errs.push("人数を1名以上入力してください");
     if (!phone.trim()) errs.push("携帯番号を入力してください");
+    else if (!/^0\d{1,4}-?\d{1,4}-?\d{3,4}$/.test(phone.replace(/\s/g, ""))) errs.push("有効な電話番号を入力してください（例: 090-1234-5678）");
     if (!accommodation.trim()) errs.push("宿泊施設を入力してください");
     if (!stayFrom) errs.push("滞在期間（開始）を選択してください");
     if (!stayTo) errs.push("滞在期間（終了）を選択してください");
@@ -129,17 +133,17 @@ export default function BookingForm() {
       plan,
       planName: selectedPlan?.name || plan,
       transferOption: transferOptionChecked,
-      representativeName,
+      representativeName: representativeName.trim(),
       numMale,
       numFemale,
       numChild,
       numInfant,
-      phone,
-      accommodation,
+      phone: phone.trim(),
+      accommodation: accommodation.trim(),
       stayFrom,
       stayTo,
       alternativeDate,
-      instagram,
+      instagram: instagram.trim(),
     };
 
     sessionStorage.setItem("bookingData", JSON.stringify(formData));
@@ -152,7 +156,40 @@ export default function BookingForm() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-6">
-      <LiffDebugPanel status={liffStatus} />
+      {process.env.NODE_ENV === "development" && <LiffDebugPanel status={liffStatus} />}
+
+      {liffStatus && !liffReady && (
+        <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4">
+          <p className="text-sm font-bold text-yellow-300">
+            LINE情報が取得できていません
+          </p>
+          <p className="mt-1 text-xs text-yellow-200/70">
+            {liffStatus.initError
+              ? "LINEアプリ内から開き直してください。"
+              : liffStatus.profileError
+              ? "プロフィールの取得に失敗しました。再試行してください。"
+              : "初期化中です。しばらくお待ちください。"}
+          </p>
+          {(liffStatus.profileError || (liffStatus.initSucceeded && !liffStatus.profile)) && (
+            <button
+              type="button"
+              onClick={() => {
+                setLiffStatus(null);
+                initLiffAndGetStatus().then((status) => {
+                  setLiffStatus(status);
+                  if (status.profile) {
+                    setLineUserId(status.profile.userId);
+                    setLineDisplayName(status.profile.displayName);
+                  }
+                });
+              }}
+              className="mt-3 rounded-md bg-yellow-500/20 px-4 py-2 text-xs font-bold text-yellow-200 hover:bg-yellow-500/30"
+            >
+              再試行
+            </button>
+          )}
+        </div>
+      )}
 
       {errors.length > 0 && (
         <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-4">
@@ -352,9 +389,10 @@ export default function BookingForm() {
       {/* 送信ボタン */}
       <button
         type="submit"
-        className="w-full rounded-lg bg-[#c9a84c] py-4 text-base font-bold text-[#0a1628] transition hover:bg-[#d4b85e] active:scale-[0.98]"
+        disabled={!liffReady}
+        className="w-full rounded-lg bg-[#c9a84c] py-4 text-base font-bold text-[#0a1628] transition hover:bg-[#d4b85e] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        確認画面へ
+        {liffReady ? "確認画面へ" : "LINE情報を取得中..."}
       </button>
     </form>
   );

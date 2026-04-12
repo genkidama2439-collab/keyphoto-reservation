@@ -7,7 +7,7 @@ import { BookingFormData } from "@/types";
  */
 export async function submitBooking(
   data: BookingFormData
-): Promise<{ success: boolean; message?: string }> {
+): Promise<{ success: boolean; message?: string; bookingId?: string }> {
   const response = await fetch("/api/booking", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -15,7 +15,7 @@ export async function submitBooking(
   });
 
   const text = await response.text();
-  let result: { success: boolean; message?: string };
+  let result: { success: boolean; message?: string; bookingId?: string };
   try {
     result = JSON.parse(text);
   } catch {

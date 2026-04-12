@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const GAS_URL = process.env.NEXT_PUBLIC_GAS_URL || "";
+const GAS_URL = process.env.GAS_URL || process.env.NEXT_PUBLIC_GAS_URL || "";
 
 export async function POST(request: Request) {
   if (!GAS_URL) {
